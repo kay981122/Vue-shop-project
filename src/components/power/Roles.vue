@@ -274,7 +274,6 @@ export default {
           roleName: this.editRoleForm.roleName,
           roleDesc: this.editRoleForm.roleDesc
         })
-        console.log(res)
         if (res.meta.status !== 200) return this.$message.error('修改角色信息失败! ')
         // 关闭对话框
         this.editRoleFormDialogVisible = false
