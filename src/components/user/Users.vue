@@ -31,12 +31,11 @@
           </el-table-column>
           <el-table-column label="电话" prop="mobile">
           </el-table-column>
-          <el-table-column label="角色" prop="role_name">
+          <el-table-column label="角色" prop="roleName">
           </el-table-column>
           <el-table-column label="状态" >
             <template slot-scope="scope">
-             <!-- {{scope.row}}-->
-              <el-switch v-model="scope.row.mg_state" @change="userStateChanged(scope.row)"></el-switch>
+              <el-switch v-model="scope.row.status" @change="userStateChanged(scope.row)"></el-switch>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="180px">
@@ -45,7 +44,7 @@
               <el-button type="primary" icon="el-icon-edit" size="mini" @click="showEditDialog(scope.row.id)"></el-button>
               <!--删除按钮-->
               <el-button type="danger" icon="el-icon-delete" size="mini" @click="removeUserById(scope.row.id)"></el-button>
-              <!--分配权限按钮-->
+              <!--分配角色按钮-->
               <el-tooltip effect="dark" content="分配角色" placement="top" :enterable="false" >
                 <el-button type="warning" icon="el-icon-setting" size="mini" @click="setRole(scope.row)"></el-button>
               </el-tooltip>
@@ -57,7 +56,7 @@
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
           :current-page="queryInfo.pagenum"
-          :page-sizes="[1, 2, 5, 10]"
+          :page-sizes="[5, 10, 15, 20]"
           :page-size="queryInfo.pagesize"
           layout="total, sizes, prev, pager, next, jumper"
           :total="total">
@@ -116,16 +115,16 @@
       <el-dialog
         title="分配角色"
         :visible.sync="setRoleDialogVisible"
-        width="50%" @close="setRoleDialogClosed">
+        width="30%" @close="setRoleDialogClosed">
         <div>
           <p>当前的用户: {{userInfo.username}}</p>
-          <p>当前的角色: {{userInfo.role_name}}</p>
+          <p>当前的角色: {{userInfo.roleName}}</p>
           <p>分配新角色：
           <el-select v-model="selectedRoleId" placeholder="请选择">
             <el-option
               v-for="item in rolesList"
               :key="item.id"
-              :label="item.roleName"
+              :label="item.name"
               :value="item.id"
               ></el-option>
           </el-select>
@@ -169,7 +168,7 @@ export default {
       queryInfo: {
         query: '',
         pagenum: 1,
-        pagesize: 2
+        pagesize: 5
       },
       userlist: [],
       total: 0,
@@ -253,14 +252,19 @@ export default {
       // 所有角色的数据列表
       rolesList: [],
       // 已选中的角色id值
-      selectedRoleId: ''
+      selectedRoleId: '',
+      // 已选中的角色名称
+      selectedRoleName: ''
     }
   },
   methods: {
     async getUserList() {
-      const { data: res } = await this.$http.get('users', { params: this.queryInfo })
-      if (res.meta.status !== 200) return this.$message.error('获取用户列表失败')
-      this.userlist = res.data.users
+      const { data: res } = await this.$http.get('admins', { params: this.queryInfo })
+      if (res.meta.status !== 200) return this.$message.error('获取管理员列表失败')
+      this.userlist = res.data.list
+      this.userlist.forEach(item => {
+        item.status = item.status !== 0
+      })
       this.total = res.data.total
     },
     /* 监听 pagesize 改变事件 */
@@ -275,9 +279,9 @@ export default {
     },
     /* 监听switch开关状态的改变 */
     async userStateChanged(userInfo) {
-      const { data: res } = await this.$http.put(`users/${userInfo.id}/state/${userInfo.mg_state}`)
+      const { data: res } = await this.$http.put(`admins/${userInfo.id}/status/${userInfo.status === true ? 1 : 0}`)
       if (res.meta.status !== 200) {
-        userInfo.mg_state = !userInfo.mg_state
+        userInfo.status = !userInfo.status
         return this.$message.error('更新用户状态失败!')
       }
       this.$message.success('更新用户状态成功!')
@@ -291,7 +295,7 @@ export default {
       this.$refs.addFormRef.validate(async valid => {
         if (!valid) return
         // 可以发起添加用户的网络请求
-        const { data: res } = await this.$http.post('users', this.addForm)
+        const { data: res } = await this.$http.post('admins', this.addForm)
         if (res.meta.status !== 201) {
           this.$message.error('添加用户失败!')
         }
@@ -303,9 +307,9 @@ export default {
     },
     /* 展示编辑用户的对话框 */
     async showEditDialog(id) {
-      const { data: res } = await this.$http.get('users/' + id)
+      const { data: res } = await this.$http.get('admins/' + id)
       if (res.meta.status !== 200) {
-        return this.$message.error('查询用户信息失败!')
+        return this.$message.error('查询管理员信息失败!')
       }
       this.editForm = res.data
       this.editDialogVisible = true
@@ -319,7 +323,7 @@ export default {
       this.$refs.editFormRef.validate(async valid => {
         if (!valid) return
         // 发起修改用户信息的数据请求
-        const { data: res } = await this.$http.put('users/' + this.editForm.id, {
+        const { data: res } = await this.$http.put('admins/' + this.editForm.id, {
           email: this.editForm.email,
           mobile: this.editForm.mobile
         })
@@ -347,8 +351,8 @@ export default {
         return this.$message.info('已取消删除')
       }
       // 删除用户
-      const { data: res } = await this.$http.delete('users/' + id)
-      if (res.meta.status !== 200) {
+      const { data: res } = await this.$http.delete('admins/' + id)
+      if (res.meta.status !== 204) {
         return this.$message.error('删除用户失败! ')
       }
       this.$message.success('删除用户成功! ')
@@ -358,8 +362,8 @@ export default {
     async setRole(userInfo) {
       this.userInfo = userInfo
       // 在展示对话框之前,获取所有角色的列表
-      const { data: res } = await this.$http.get('roles')
-      if (res.meta.status !== 200) return this.$message.error('获取劫色列表失败! ')
+      const { data: res } = await this.$http.get('rbac/roles')
+      if (res.meta.status !== 200) return this.$message.error('获取角色列表失败! ')
       this.rolesList = res.data
       this.setRoleDialogVisible = true
     },
@@ -368,7 +372,14 @@ export default {
       if (!this.selectedRoleId) {
         return this.$message.error('请选择要分配的角色! ')
       }
-      const { data: res } = await this.$http.put(`users/${this.userInfo.id}/role`, { rid: this.selectedRoleId })
+      for (const idx in this.rolesList) {
+        const role = this.rolesList[idx]
+        if (role.id === this.selectedRoleId) {
+          this.selectedRoleName = role.name
+          break
+        }
+      }
+      const { data: res } = await this.$http.put(`admins/${this.userInfo.id}/role`, { rid: this.selectedRoleId, roleName: this.selectedRoleName })
       if (res.meta.status !== 200) {
         return this.$message.error('更新角色失败! ')
       }
@@ -379,6 +390,7 @@ export default {
     // 分配角色的对话框的关闭事件
     setRoleDialogClosed() {
       this.selectedRoleId = ''
+      this.selectedRoleName = ''
       this.userInfo = {}
     }
 

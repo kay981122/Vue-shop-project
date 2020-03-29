@@ -62,11 +62,11 @@
       :visible.sync="setAddRoleDialogVisible"
       width="30%" @close="addRoleFormClosed">
       <el-form :model="addRoleForm" :rules="addRoleRules" label-width="100px" ref="addRoleFormRef">
-        <el-form-item label="角色名称" prop="roleName">
-          <el-input v-model="addRoleForm.roleName"></el-input>
+        <el-form-item label="角色名称" prop="name">
+          <el-input v-model="addRoleForm.name"></el-input>
         </el-form-item>
-        <el-form-item label="角色描述" prop="roleDesc">
-          <el-input v-model="addRoleForm.roleDesc"></el-input>
+        <el-form-item label="角色描述" prop="description">
+          <el-input v-model="addRoleForm.description"></el-input>
         </el-form-item>
       </el-form>
       <span slot="footer" class="dialog-footer">
@@ -80,12 +80,12 @@
       :visible.sync="editRoleFormDialogVisible"
       width="30%"
       @close="editRoleFormDialogClosed">
-      <el-form :model="editRoleForm" :rules="editRoleFormRules" ref="editRoleFormRef" label-width="70px" >
-        <el-form-item label="角色名称" prop="roleName">
-          <el-input v-model="editRoleForm.roleName"></el-input>
+      <el-form :model="editRoleForm" :rules="editRoleFormRules" ref="editRoleFormRef" label-width="80px" >
+        <el-form-item label="角色名称" prop="name">
+          <el-input v-model="editRoleForm.name"></el-input>
         </el-form-item>
-        <el-form-item label="角色描述" prop="roleDesc">
-          <el-input v-model="editRoleForm.roleDesc"></el-input>
+        <el-form-item label="角色描述" prop="description">
+          <el-input v-model="editRoleForm.description"></el-input>
         </el-form-item>
       </el-form>
       <span slot="footer" class="dialog-footer">
@@ -110,6 +110,7 @@
 </template>
 
 <script>
+import _ from 'lodash'
 export default {
   name: 'Roles',
   data() {
@@ -133,11 +134,11 @@ export default {
       // 添加角色规则
       addRoleRules: {
         // 验证角色名称是否合法
-        roleName: [
+        name: [
           { required: true, message: '请输入角色名称', trigger: 'blur' }
         ],
         // 验证角色描述是否合法
-        roleDesc: [
+        description: [
 
         ]
       },
@@ -148,21 +149,100 @@ export default {
       // 编辑角色表单规则
       editRoleFormRules: {
         // 验证角色名称是否合法
-        roleName: [
+        name: [
           { required: true, message: '请输入角色名称', trigger: 'blur' }
         ],
         // 验证角色描述是否合法
-        roleDesc: [
+        description: [
         ]
       }
     }
   },
   methods: {
+    // 权限处理函数
+    getPermissionsResult(permissionKeys, permissionIds) {
+      const permissionsResult = {}
+      // 处理一级菜单
+      for (const idx in permissionIds) {
+        if (!permissionIds[idx] || permissionIds[idx] == '') continue
+        const permissionId = parseInt(permissionIds[idx])
+        const permission = permissionKeys[permissionId]
+        if (permission && permission.type == 0) {
+          permissionsResult[permission.id] = {
+            id: permission.id,
+            authName: permission.name,
+            path: permission.uri,
+            children: []
+          }
+        }
+      }
+
+      // 临时存储二级返回结果
+      const tmpResult = {}
+      // 处理二级菜单
+      for (const idx in permissionIds) {
+        if (!permissionIds[idx] || permissionIds[idx] == '') continue
+        const permissionId = parseInt(permissionIds[idx])
+        const permission = permissionKeys[permissionId]
+        if (permission && permission.type == 1) {
+          const parentPermissionResult = permissionsResult[permission.pid]
+          if (parentPermissionResult) {
+            tmpResult[permission.id] = {
+              id: permission.id,
+              authName: permission.name,
+              path: permission.uri,
+              children: []
+            }
+            parentPermissionResult.children.push(tmpResult[permission.id])
+          }
+        }
+      }
+      // 处理三级菜单
+      for (const idx in permissionIds) {
+        if (!permissionIds[idx] || permissionIds[idx] == '') continue
+        const permissionId = parseInt(permissionIds[idx])
+        const permission = permissionKeys[permissionId]
+        if (permission && permission.type == 2) {
+          const parentPermissionResult = tmpResult[permission.pid]
+
+          if (parentPermissionResult) {
+            parentPermissionResult.children.push({
+              id: permission.id,
+              authName: permission.name,
+              path: permission.uri
+            })
+          }
+        }
+      }
+      return permissionsResult
+    },
     // 获得所有角色的列表
     async getRolesList() {
-      const { data: res } = await this.$http.get('roles')
+      const { data: res } = await this.$http.get('rbac/roles')
       if (res.meta.status !== 200) return this.$message.error('获取角色列表失败!')
-      this.rolesList = res.data
+      this.rolesList = await this.dealRolesList(res.data)
+    },
+    // 处理角色列表
+    async dealRolesList(roles) {
+      const { data: permissions } = await this.$http.get('rbac/permissions')
+      if (permissions.meta.status !== 200) return this.$message.error('获取权限列表失败! ')
+      const permissionKeys = _.keyBy(permissions.data, 'id')
+      const rolesResult = []
+      for (const idx in roles) {
+        const r = roles[idx]
+        const roleResult = {
+          id: r.id,
+          roleName: r.name,
+          roleDesc: r.description,
+          children: []
+        }
+        if (r.ps_ids !== null) {
+          const permissionIds = r.ps_ids.split(',')
+          roleResult.children = _.values(this.getPermissionsResult(permissionKeys, permissionIds))
+        }
+        rolesResult.push(roleResult)
+      }
+      return rolesResult
     },
     // 根据id删除对应的权限
     async removeRightById(role, rightId) {
@@ -178,20 +258,75 @@ export default {
       }
       const { data: res } = await this.$http.delete(`roles/${role.id}/rights/${rightId}`)
       if (res.meta.status !== 200) return this.$message.error('删除权限失败!')
-
       role.children = res.data
+    },
+    dealRightsTree(permissions) {
+      const keyCategories = _.keyBy(permissions, 'id')
+
+      // 显示一级
+      const permissionsResult = {}
+
+      // 处理一级菜单
+      for (const idx in permissions) {
+        const permission = permissions[idx]
+        if (permission && permission.type == 0) {
+          permissionsResult[permission.id] = {
+            id: permission.id,
+            authName: permission.name,
+            path: permission.uri,
+            pid: permission.pid,
+            children: []
+          }
+        }
+      }
+
+      // 临时存储二级返回结果
+      const tmpResult = {}
+      // 处理二级菜单
+      for (const idx in permissions) {
+        const permission = permissions[idx]
+        if (permission && permission.type == 1) {
+          const parentPermissionResult = permissionsResult[permission.pid]
+          if (parentPermissionResult) {
+            tmpResult[permission.id] = {
+              id: permission.id,
+              authName: permission.name,
+              path: permission.uri,
+              pid: permission.pid,
+              children: []
+            }
+            parentPermissionResult.children.push(tmpResult[permission.id])
+          }
+        }
+      }
+
+      // 处理三级菜单
+      for (const idx in permissions) {
+        const permission = permissions[idx]
+        if (permission && permission.type == 2) {
+          const parentPermissionResult = tmpResult[permission.pid]
+
+          if (parentPermissionResult) {
+            parentPermissionResult.children.push({
+              id: permission.id,
+              authName: permission.name,
+              path: permission.uri,
+              pid: permission.pid + ',' + keyCategories[permission.pid].pid
+            })
+          }
+        }
+      }
+      return _.values(permissionsResult)
     },
     // 展示分配权限的对话框
     async showSetRightDialog(role) {
       this.roleId = role.id
       // 获取所有权限的数据
-      const { data: res } = await this.$http.get('rights/tree')
+      const { data: res } = await this.$http.get('rbac/permissions/')
       if (res.meta.status !== 200) return this.$message.error('获取权限数据失败!')
-
       // 把获取到的权限数据保存到data中
-      this.rightsList = res.data
+      this.rightsList = this.dealRightsTree(res.data)
       this.getLeafKeys(role, this.defKeys)
-
       this.setRightDialogVisible = true
     },
     // 通过递归的形式，获取角色下所有三级权限id，并保存到defKeys 数组中
@@ -207,11 +342,11 @@ export default {
       this.defKeys = []
     },
     // 分配权限事件
-    async allotRights(roleId) {
+    async allotRights() {
       const keys = [...this.$refs.treeRef.getCheckedKeys(), ...this.$refs.treeRef.getHalfCheckedKeys()]
       const idStr = keys.join(',')
-
-      const { data: res } = await this.$http.post(`roles/${this.roleId}/rights`, { rids: idStr })
+      console.log(idStr)
+      const { data: res } = await this.$http.put(`rbac/roles/${this.roleId}`, { ps_ids: idStr })
       if (res.meta.status !== 200) return this.$message.error('分配权限失败! ')
 
       this.$message.success('分配权限成功! ')
@@ -226,7 +361,7 @@ export default {
     addRole() {
       this.$refs.addRoleFormRef.validate(async valid => {
         if (!valid) return
-        const { data: res } = await this.$http.post('roles', this.addRoleForm)
+        const { data: res } = await this.$http.post('rbac/roles', this.addRoleForm)
         if (res.meta.status !== 201) {
           return this.$message.error('添加角色失败! ')
         }
@@ -250,14 +385,14 @@ export default {
         return this.$message.info('已取消删除')
       }
       // 删除角色
-      const { data: res } = await this.$http.delete('roles/' + id)
+      const { data: res } = await this.$http.delete('rbac/roles/' + id)
       if (res.meta.status !== 200) return this.$message.error('删除角色失败! ')
       this.$message.success('删除角色成功! ')
       this.getRolesList()
     },
     // 编辑角色对话框的显示与隐藏
     async showEditRoleDialog(id) {
-      const { data: res } = await this.$http.get('roles/' + id)
+      const { data: res } = await this.$http.get('rbac/roles/' + id)
       if (res.meta.status !== 200) return this.$message.error('获取角色信息失败! ')
       this.editRoleForm = res.data
       this.editRoleFormDialogVisible = true
@@ -270,9 +405,9 @@ export default {
     editRoleInfo() {
       this.$refs.editRoleFormRef.validate(async valid => {
         if (!valid) return
-        const { data: res } = await this.$http.put('roles/' + this.editRoleForm.roleId, {
-          roleName: this.editRoleForm.roleName,
-          roleDesc: this.editRoleForm.roleDesc
+        const { data: res } = await this.$http.put('rbac/roles/' + this.editRoleForm.id, {
+          name: this.editRoleForm.name,
+          description: this.editRoleForm.description
         })
         if (res.meta.status !== 200) return this.$message.error('修改角色信息失败! ')
         // 关闭对话框

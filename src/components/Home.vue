@@ -59,7 +59,96 @@ export default {
   data() {
     return {
       // 左侧菜单数据
-      menuList: [],
+      menuList: [
+        {
+          id: 125,
+          authName: '用户管理',
+          path: 'users',
+          order: 1,
+          children: [{
+            id: 110,
+            authName: '用户列表',
+            order: 1,
+            path: 'users',
+            children: []
+          }]
+        },
+        {
+          id: 103,
+          authName: '权限管理',
+          path: 'rights',
+          order: 2,
+          children: [{
+            id: 111,
+            authName: '角色列表',
+            order: null,
+            path: 'roles',
+            children: []
+
+          }, {
+            id: 112,
+            authName: '权限列表',
+            order: null,
+            path: 'rights',
+            children: []
+
+          }]
+        },
+        {
+          id: 101,
+          authName: '商品管理',
+          path: 'goods',
+          order: 3,
+          children: [{
+            id: 104,
+            authName: '商品列表',
+            order: 1,
+            path: 'goods',
+            children: []
+
+          }, {
+            id: 115,
+            authName: '分类参数',
+            order: null,
+            path: 'params',
+            children: []
+
+          }, {
+            id: 121,
+            authName: '商品分类',
+            order: 3,
+            path: 'categories',
+            children: []
+          }]
+        },
+        {
+          id: 102,
+          authName: '订单管理',
+          path: 'orders',
+          order: 4,
+          children: [{
+            id: 107,
+            authName: '订单列表',
+            order: 1,
+            path: 'orders',
+            children: []
+
+          }]
+        },
+        {
+          id: 145,
+          authName: '数据统计',
+          path: 'reports',
+          order: 5,
+          children: [{
+            id: 146,
+            authName: '数据报表',
+            order: null,
+            path: 'reports',
+            children: []
+
+          }]
+        }],
       iconsObj: {
         125: 'iconfont icon-user',
         103: 'iconfont icon-tijikongjian',
@@ -74,7 +163,6 @@ export default {
     }
   },
   created() {
-    this.getMenuList()
     this.activePath = window.sessionStorage.getItem('activePath')
   },
   name: 'Home.vue',
@@ -82,12 +170,6 @@ export default {
     logout () {
       window.sessionStorage.clear()
       this.$router.push('/login')
-    },
-    // 获取所有菜单
-    async getMenuList() {
-      const { data: res } = await this.$http.get('menus')
-      if (res.meta.status !== 200) return this.$message.error(res.meta.msg)
-      this.menuList = res.data
     },
     // 点击按钮切换菜单折叠与展开
     toggleCollapse() {
